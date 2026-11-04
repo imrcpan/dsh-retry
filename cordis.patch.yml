@@ -1,0 +1,28 @@
+# dsh-retry bundle layer: mount the fixed schedule executor and retire the
+# bundled one, whose provider retryPolicy can only express exponential backoff.
+#
+# This file applies as one bundle layer before the profile's cordis.patch.yml,
+# so a user layer can still override the row or change the schedule by id.
+- insert:
+    - id: dsh-retry
+      name: "dsh-retry"
+      config:
+        schedule: [2000, 5000, 5000, 5000, 10000]
+        tailDelayMs: 20000
+        retryableCodes:
+          - EMPTY_RESPONSE
+          - RATE_LIMIT
+          - SERVER
+          - TIMEOUT
+          - TRANSPORT
+          - PI_AI_ERROR
+          - AUTH
+          - QUOTA
+          - ACCOUNT_QUOTA
+          - ACCOUNT_TOKEN_INVALID
+          - INVALID_CREDENTIAL
+          - MALFORMED_RESPONSE
+          - HTTP_*
+# Two executors would compete for the same failure, so disable the bundled one.
+- id: llm-retry
+  disabled: true
