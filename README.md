@@ -1,6 +1,6 @@
 # dsh-retry
 
-A fixed-schedule retry executor for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) model requests.
+A fixed-schedule retry executor for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) model requests, tuned for relay endpoints and unstable upstreams.
 
 DeepSeek Harness retries failed model requests at the agent step boundary. The bundled executor (`@deepseek-ai/dsh-llm-retry`) takes its wait from a provider `retryPolicy` that only exposes exponential backoff (`initialDelayMs`, `maxDelayMs`, `jitterRatio`). This plugin replaces that curve with an explicit schedule:
 
@@ -9,6 +9,31 @@ DeepSeek Harness retries failed model requests at the agent step boundary. The b
 | wait | 2s | 5s | 5s | 5s | 10s | 20s, unlimited |
 
 A retried step is re-run inside the same open turn against the same durable history, so no partial answer is duplicated and the model never sees the retry.
+
+## Built for relay and pooled upstreams
+
+A relay endpoint is a third-party API proxy that fans one key out across a pool
+of upstream accounts. It fails per account, not per request: a 401, an exhausted
+quota or a 404 on one backend says nothing about the next attempt, and a public
+gateway in front of the pool adds 5xx pages of its own. This executor is tuned
+for that deployment and for unstable networks:
+
+- **Per-account failures are retried.** `AUTH`, `QUOTA`, `ACCOUNT_QUOTA`,
+  `ACCOUNT_TOKEN_INVALID` and `INVALID_CREDENTIAL` are retried, and the
+  `HTTP_*` prefix covers every unclassified 4xx, so `HTTP_404` is repeated
+  instead of ending the turn.
+- **Gateway noise is retried.** Cloudflare and proxy 5xx answers classify as
+  `SERVER`, including HTML error pages that never parse as JSON.
+- **Corrupt streams are retried.** A broken SSE frame classifies as
+  `MALFORMED_RESPONSE`.
+- **Waits stay short and predictable.** 2s, 5s, 5s, 5s, 10s, then every 20s
+  without limit, so a short wobble costs seconds instead of an exponential climb
+  toward a ceiling.
+- **No duplicated output.** Recovery re-runs the step against the durable
+  history, so a retried request never repeats a half-finished answer.
+
+The executor does not rotate accounts by itself: a retry only re-issues the
+request, so the relay has to select a different upstream for the next attempt.
 
 ## Why a separate executor
 
