@@ -33,6 +33,11 @@ const DEFAULT_TAIL_DELAY_MS = 20000
  *
  * Upstreams built on pooled accounts fail per account, so credential and quota
  * codes are retried as well: the next attempt may land on a healthy account.
+ *
+ * A trailing `*` is a prefix rule: `HTTP_*` matches every unclassified HTTP
+ * status code (the adapter uses `HTTP_<status>` only for 4xx values it cannot
+ * place in AUTH / QUOTA / RATE_LIMIT / INVALID_REQUEST, e.g. HTTP_404, HTTP_409,
+ * HTTP_422).
  */
 const DEFAULT_CODES = [
   'EMPTY_RESPONSE',
@@ -47,6 +52,7 @@ const DEFAULT_CODES = [
   'ACCOUNT_TOKEN_INVALID',
   'INVALID_CREDENTIAL',
   'MALFORMED_RESPONSE',
+  'HTTP_*',
 ]
 
 function positiveMs(value, fallback, label) {
@@ -67,11 +73,33 @@ function resolveSettings(config) {
   if (!Array.isArray(codes) || codes.length === 0 || codes.some((code) => typeof code !== 'string' || code.length === 0)) {
     throw new Error('dsh-retry: retryableCodes must be a non-empty array of non-empty strings')
   }
+  const exact = new Set()
+  const prefixes = []
+  for (const candidate of codes) {
+    if (candidate.endsWith('*')) {
+      const prefix = candidate.slice(0, -1)
+      if (prefix.length === 0) throw new Error('dsh-retry: a wildcard retryable code needs a prefix, for example "HTTP_*"')
+      prefixes.push(prefix)
+    } else {
+      exact.add(candidate)
+    }
+  }
   return {
     schedule: schedule.map((delay, position) => positiveMs(delay, 0, `schedule[${position}]`)),
     tailDelayMs: positiveMs(source.tailDelayMs, DEFAULT_TAIL_DELAY_MS, 'tailDelayMs'),
-    codes: new Set(codes),
+    codes: { exact, prefixes },
   }
+}
+
+/**
+ * Test whether one failure code is covered, honoring trailing-`*` prefix rules.
+ * @param codes - resolved exact/prefix matchers.
+ * @param code - failure code from the request-error waterfall.
+ * @returns whether the attempt is worth repeating.
+ */
+function isRetryable(codes, code) {
+  if (typeof code !== 'string' || code.length === 0) return false
+  return codes.exact.has(code) || codes.prefixes.some((prefix) => code.startsWith(prefix))
 }
 
 /**
@@ -125,7 +153,7 @@ export function apply(ctx, config = {}) {
 
   async function recover(payload, next) {
     const { agent, turn, step, provider, failure, signal } = payload
-    if (failure === undefined || !settings.codes.has(failure.code)) return next()
+    if (failure === undefined || !isRetryable(settings.codes, failure.code)) return next()
     if (signal?.aborted === true) return undefined
     const fused = signal === undefined ? lifetime.signal : AbortSignal.any([signal, lifetime.signal])
     if (fused.aborted) return undefined
