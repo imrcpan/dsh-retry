@@ -1,0 +1,35 @@
+{
+  "name": "dsh-retry",
+  "version": "0.1.0",
+  "description": "Fixed-schedule retry executor for DeepSeek Harness model requests.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "example",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "retry",
+    "backoff"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imrcpan/dsh-retry.git"
+  },
+  "homepage": "https://github.com/imrcpan/dsh-retry#readme",
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
