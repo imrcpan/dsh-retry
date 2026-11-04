@@ -2,6 +2,12 @@
 
 A fixed-schedule retry executor for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) model requests, tuned for relay endpoints and unstable upstreams.
 
+## Quick install
+
+```bash
+dsh plugin --profile web add github:imrcpan/dsh-retry
+```
+
 DeepSeek Harness retries failed model requests at the agent step boundary. The bundled executor (`@deepseek-ai/dsh-llm-retry`) takes its wait from a provider `retryPolicy` that only exposes exponential backoff (`initialDelayMs`, `maxDelayMs`, `jitterRatio`). This plugin replaces that curve with an explicit schedule:
 
 | retry | 1 | 2 | 3 | 4 | 5 | 6 and later |
