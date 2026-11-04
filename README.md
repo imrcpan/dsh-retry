@@ -2,7 +2,7 @@
 
 A fixed-schedule retry executor for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) model requests, tuned for relay endpoints and unstable upstreams.
 
-## Quick install
+## Quick start
 
 ```bash
 dsh plugin --profile web add github:imrcpan/dsh-retry
