@@ -28,7 +28,12 @@ const DEFAULT_SCHEDULE_MS = [2000, 5000, 5000, 5000, 10000]
 /** Default delay for retry 6 and every retry after it. */
 const DEFAULT_TAIL_DELAY_MS = 20000
 
-/** Failure codes that are transient enough to repeat the request. */
+/**
+ * Failure codes that are transient enough to repeat the request.
+ *
+ * Upstreams built on pooled accounts fail per account, so credential and quota
+ * codes are retried as well: the next attempt may land on a healthy account.
+ */
 const DEFAULT_CODES = [
   'EMPTY_RESPONSE',
   'RATE_LIMIT',
@@ -36,6 +41,12 @@ const DEFAULT_CODES = [
   'TIMEOUT',
   'TRANSPORT',
   'PI_AI_ERROR',
+  'AUTH',
+  'QUOTA',
+  'ACCOUNT_QUOTA',
+  'ACCOUNT_TOKEN_INVALID',
+  'INVALID_CREDENTIAL',
+  'MALFORMED_RESPONSE',
 ]
 
 function positiveMs(value, fallback, label) {
