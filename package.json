@@ -9,6 +9,7 @@
   },
   "files": [
     "index.js",
+    "cordis.patch.yml",
     "example",
     "README.md",
     "LICENSE"
@@ -27,7 +28,13 @@
   },
   "homepage": "https://github.com/imrcpan/dsh-retry#readme",
   "engines": {
-    "node": ">=20.3.0"
+    "node": ">=20.3.0",
+    "dsh": ">=0.2.1-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   },
   "scripts": {
     "test": "node --test"
