@@ -1,7 +1,7 @@
 {
   "name": "dsh-retry",
   "version": "0.1.0",
-  "description": "Fixed-schedule retry executor for DeepSeek Harness model requests, tuned for relay endpoints and unstable upstreams.",
+  "description": "A retry executor plugin for DeepSeek Harness model requests: fixed-schedule retries, tuned for relay endpoints and unstable upstreams.",
   "type": "module",
   "main": "index.js",
   "exports": {

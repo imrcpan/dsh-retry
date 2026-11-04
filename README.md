@@ -1,6 +1,6 @@
 # dsh-retry
 
-A fixed-schedule retry executor for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) model requests, tuned for relay endpoints and unstable upstreams.
+A retry executor plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) model requests: fixed-schedule retries, tuned for relay endpoints and unstable upstreams.
 
 ## Quick start
 
