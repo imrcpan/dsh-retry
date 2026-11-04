@@ -1,0 +1,28 @@
+# Example profile layer for dsh-retry.
+#
+# Apply this as a dsh profile patch, or copy the entries into an existing
+# cordis.patch.yml. A new plugin entry must be inserted, because a top-level
+# patch can only target an id that an earlier layer already declared.
+- insert:
+    - id: dsh-retry
+      name: "dsh-retry"
+      config:
+        schedule: [2000, 5000, 5000, 5000, 10000]
+        tailDelayMs: 20000
+        retryableCodes:
+          - EMPTY_RESPONSE
+          - RATE_LIMIT
+          - SERVER
+          - TIMEOUT
+          - TRANSPORT
+          - PI_AI_ERROR
+          - AUTH
+          - QUOTA
+          - ACCOUNT_QUOTA
+          - ACCOUNT_TOKEN_INVALID
+          - INVALID_CREDENTIAL
+          - MALFORMED_RESPONSE
+          - HTTP_*
+# The bundled executor would otherwise compete with this one.
+- id: llm-retry
+  disabled: true

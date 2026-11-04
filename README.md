@@ -1,0 +1,132 @@
+# dsh-retry
+
+A fixed-schedule retry executor for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) model requests.
+
+DeepSeek Harness retries failed model requests at the agent step boundary. The bundled executor (`@deepseek-ai/dsh-llm-retry`) takes its wait from a provider `retryPolicy` that only exposes exponential backoff (`initialDelayMs`, `maxDelayMs`, `jitterRatio`). This plugin replaces that curve with an explicit schedule:
+
+| retry | 1 | 2 | 3 | 4 | 5 | 6 and later |
+| --- | --- | --- | --- | --- | --- | --- |
+| wait | 2s | 5s | 5s | 5s | 10s | 20s, unlimited |
+
+A retried step is re-run inside the same open turn against the same durable history, so no partial answer is duplicated and the model never sees the retry.
+
+## Why a separate executor
+
+- Fixed delays: 2s, 5s, 5s, 5s, 10s, then a steady 20s tail instead of exponential growth.
+- One unlimited tail, for upstreams that eventually recover.
+- Prefix matching for failure-code families, so `HTTP_*` covers unclassified 4xx statuses such as `HTTP_404`.
+- Standard `llm/retry` events, so the Chat retry status row and the Trajectory panel keep working.
+
+## Requirements
+
+- DeepSeek Harness `0.2.1-rc.5` (other releases may differ).
+- Node.js `>=20.3`, which provides `AbortSignal.any`.
+
+## Install
+
+Add the package to a profile, then insert the loader entry.
+
+```bash
+dsh plugin --profile web add github:imrcpan/dsh-retry
+```
+
+A top-level patch can only target an existing id, so the new entry goes through `insert`:
+
+```yaml
+- insert:
+    - id: dsh-retry
+      name: "dsh-retry"
+      config:
+        schedule: [2000, 5000, 5000, 5000, 10000]
+        tailDelayMs: 20000
+        retryableCodes:
+          - EMPTY_RESPONSE
+          - RATE_LIMIT
+          - SERVER
+          - TIMEOUT
+          - TRANSPORT
+          - PI_AI_ERROR
+          - AUTH
+          - QUOTA
+          - ACCOUNT_QUOTA
+          - ACCOUNT_TOKEN_INVALID
+          - INVALID_CREDENTIAL
+          - MALFORMED_RESPONSE
+          - HTTP_*
+- id: llm-retry
+  disabled: true
+```
+
+Then restart the profile. The configuration is read at boot.
+
+Disabling `llm-retry` matters: keeping both executors mounted would let the bundled exponential policy retry some of the same failures first and would leave two writers of the retry chain state.
+
+### Install from a checkout
+
+```json
+{
+  "dependencies": {
+    "dsh-retry": "file:./plugins/dsh-retry"
+  }
+}
+```
+
+Link the package into the profile `node_modules` (a symlink is enough for pnpm workspaces) and use the same patch entry.
+
+## Configuration
+
+| key | default | meaning |
+| --- | --- | --- |
+| `schedule` | `[2000, 5000, 5000, 5000, 10000]` | wait in milliseconds before retries 1..n; the array length is the bounded head |
+| `tailDelayMs` | `20000` | wait for every retry after the schedule is exhausted |
+| `retryableCodes` | see below | failure codes that are worth repeating |
+
+A `retryableCodes` entry ending in `*` is a prefix rule. `HTTP_*` matches `HTTP_404`, `HTTP_409`, `HTTP_422` and any other unclassified status. A bare `*` is rejected because it would match every failure.
+
+## Default retryable codes
+
+| code | typical cause |
+| --- | --- |
+| `EMPTY_RESPONSE` | a completed response with no content blocks |
+| `RATE_LIMIT` | HTTP 429 or a provider rate-limit error |
+| `SERVER` | HTTP 5xx, including gateway and Cloudflare 5xx responses |
+| `TIMEOUT` | a request or stream deadline |
+| `TRANSPORT` | connection reset, socket error, truncated stream |
+| `PI_AI_ERROR` | an upstream error the pi-ai adapter could not classify |
+| `AUTH` | HTTP 401 or 403; with a pooled account upstream another account may succeed |
+| `QUOTA`, `ACCOUNT_QUOTA` | exhausted balance or account quota |
+| `ACCOUNT_TOKEN_INVALID` | a stored account token rejected with 401 |
+| `INVALID_CREDENTIAL` | a malformed credential entry in the pool |
+| `MALFORMED_RESPONSE` | a corrupt SSE frame or a mismatched event type |
+| `HTTP_*` | unclassified 4xx statuses such as `HTTP_404`, `HTTP_409`, `HTTP_422` |
+
+## Not retried
+
+| code | why |
+| --- | --- |
+| `CONTEXT_WINDOW_EXCEEDED` | compaction owns the recovery; retrying would loop |
+| `INVALID_REQUEST` | the request itself is wrong, so another account cannot help |
+| `NO_ADAPTER`, `UNSUPPORTED_REASONING_EFFORT` | configuration errors |
+| `MISSING_CREDENTIAL` | no credential is configured for the route |
+| `ACCOUNT_SIGN_IN_REQUIRED` | a human has to sign in |
+| `ABORTED` | cancellation must stay terminal |
+| `UNKNOWN` | the fallback code for foreign errors, unsafe to repeat without limit |
+
+Add any of them to `retryableCodes` if your deployment disagrees.
+
+## What you see
+
+Each planned retry appends a durable `llm/retry` event, then `llm/retry-started` once the wait ends. The Chat transcript renders a row such as `Retrying model request (2/5) . 4s` with an expandable failure reason and delay, and the Trajectory panel lists the attempt, error code and delay. Retries 6 and later render with an unlimited maximum.
+
+No toast is raised, no partial output from a failed attempt is kept, and the model sees nothing: it only receives the rebuilt request for the step that is being retried. Every attempt is a separately billed provider request.
+
+## Limitations
+
+- The retry chain counter lives in memory per session. A host restart ends the turn, so nothing is lost that a durable counter would have preserved.
+- Only agent-loop requests are retried. Direct `ctx.llm.stream()` callers stay single-attempt.
+- The tail is genuinely unlimited. When the upstream never recovers, the turn stays in the retrying state until it is stopped.
+- Retrying pooled credential and quota failures assumes the pool rotates on the next attempt. A permanently exhausted pool loops every 20 seconds.
+
+## License
+
+MIT.
