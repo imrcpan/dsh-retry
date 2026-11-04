@@ -24,13 +24,19 @@ A retried step is re-run inside the same open turn against the same durable hist
 
 ## Install
 
-Add the package to a profile, then insert the loader entry.
+The package is a DSH bundle: `package.json` declares `dsh.bundle.patch`, so the
+standard install also mounts the executor and retires the bundled one. No
+hand-written patch is required.
 
 ```bash
 dsh plugin --profile web add github:imrcpan/dsh-retry
 ```
 
-A top-level patch can only target an existing id, so the new entry goes through `insert`:
+Restart the profile afterwards; the composition is read at boot. The row then
+appears under Plugins, where its `config` is editable.
+
+The shipped layer ([cordis.patch.yml](./cordis.patch.yml)) inserts the executor
+and disables `llm-retry`:
 
 ```yaml
 - insert:
@@ -39,29 +45,26 @@ A top-level patch can only target an existing id, so the new entry goes through 
       config:
         schedule: [2000, 5000, 5000, 5000, 10000]
         tailDelayMs: 20000
-        retryableCodes:
-          - EMPTY_RESPONSE
-          - RATE_LIMIT
-          - SERVER
-          - TIMEOUT
-          - TRANSPORT
-          - PI_AI_ERROR
-          - AUTH
-          - QUOTA
-          - ACCOUNT_QUOTA
-          - ACCOUNT_TOKEN_INVALID
-          - INVALID_CREDENTIAL
-          - MALFORMED_RESPONSE
-          - HTTP_*
+        retryableCodes: [ ... ]   # full list in cordis.patch.yml
 - id: llm-retry
   disabled: true
 ```
 
-Then restart the profile. The configuration is read at boot.
-
-Disabling `llm-retry` matters: keeping both executors mounted would let the bundled exponential policy retry some of the same failures first and would leave two writers of the retry chain state.
+Disabling `llm-retry` matters: two mounted executors would compete for the same
+failure and both write retry chain state. Keep the row disabled if the profile
+overrides it.
 
 ### Install from a checkout
+
+Install the checkout as a bundle so its manifest applies:
+
+```bash
+dsh plugin --profile web add /absolute/path/to/dsh-retry
+```
+
+A plain `file:` dependency is also accepted, but then no bundle layer is
+applied and the block above has to be copied into the profile's
+`cordis.patch.yml` by hand:
 
 ```json
 {
@@ -70,8 +73,6 @@ Disabling `llm-retry` matters: keeping both executors mounted would let the bund
   }
 }
 ```
-
-Link the package into the profile `node_modules` (a symlink is enough for pnpm workspaces) and use the same patch entry.
 
 ## Configuration
 
